@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Affärsled-berikare – BioFakturaHelper</title>
+  <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f0f2f5;
+      color: #333;
+      padding-top: 72px;
+      padding-left: 16px;
+      padding-right: 16px;
+      padding-bottom: 32px;
+      min-height: 100vh;
+    }
+
+    /* ── Navbar ── */
+    .navbar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 56px;
+      background: #1a1a2e;
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      gap: 32px;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+    }
+
+    .navbar-brand {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #fff;
+      text-decoration: none;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      margin-right: 8px;
+    }
+
+    .navbar-divider {
+      width: 1px;
+      height: 22px;
+      background: rgba(255,255,255,0.15);
+    }
+
+    .navbar-links {
+      display: flex;
+      gap: 4px;
+      list-style: none;
+    }
+
+    .navbar-links a {
+      display: inline-block;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 0.88rem;
+      color: rgba(255,255,255,0.7);
+      text-decoration: none;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+
+    .navbar-links a:hover {
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+    }
+
+    .navbar-links a.active {
+      background: #4a7fd4;
+      color: #fff;
+    }
+
+    /* ── Page header ── */
+    .page-header {
+      max-width: 900px;
+      margin: 0 auto 28px;
+    }
+
+    .page-header h1 {
+      font-size: 1.6rem;
+      color: #1a1a2e;
+      margin-bottom: 4px;
+    }
+
+    .page-header p {
+      color: #666;
+      font-size: 0.9rem;
+    }
+
+    /* ── Upload grid ── */
+    .upload-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      max-width: 900px;
+      margin: 0 auto 24px;
+    }
+
+    @media (max-width: 640px) {
+      .upload-grid { grid-template-columns: 1fr; }
+    }
+
+    .upload-card {
+      background: #fff;
+      border: 2px dashed #c5cde0;
+      border-radius: 12px;
+      padding: 28px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+    }
+
+    .upload-card.drag-over {
+      border-color: #4a7fd4;
+      background: #f0f5ff;
+    }
+
+    .upload-card.file-loaded {
+      border-color: #34c77b;
+      border-style: solid;
+    }
+
+    .upload-icon { font-size: 2rem; margin-bottom: 10px; }
+
+    .upload-card h3 {
+      font-size: 0.95rem;
+      color: #1a1a2e;
+      margin-bottom: 6px;
+    }
+
+    .upload-card p {
+      font-size: 0.82rem;
+      color: #888;
+      margin-bottom: 14px;
+    }
+
+    .btn-upload {
+      background: #4a7fd4;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 18px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-upload:hover { background: #3a6fc4; }
+
+    .file-name {
+      margin-top: 10px;
+      font-size: 0.8rem;
+      color: #34c77b;
+      font-weight: 600;
+      min-height: 18px;
+    }
+
+    input[type="file"] { display: none; }
+
+    /* ── Action area ── */
+    .action-bar {
+      max-width: 900px;
+      margin: 0 auto 24px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .btn-primary {
+      background: #4a7fd4;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 11px 28px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+    }
+
+    .btn-primary:hover:not(:disabled) { background: #3a6fc4; }
+
+    .btn-primary:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* ── Stats ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 14px;
+      max-width: 900px;
+      margin: 0 auto 24px;
+    }
+
+    .stat-card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 16px 18px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    }
+
+    .stat-card .stat-num {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: #1a1a2e;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .stat-card .stat-label {
+      font-size: 0.78rem;
+      color: #888;
+    }
+
+    .stat-card.green .stat-num  { color: #34c77b; }
+    .stat-card.orange .stat-num { color: #f59e0b; }
+    .stat-card.red .stat-num    { color: #ef4444; }
+
+    /* ── Result card ── */
+    .result-card {
+      max-width: 900px;
+      margin: 0 auto 24px;
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px 24px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    }
+
+    .result-card h2 {
+      font-size: 1rem;
+      color: #1a1a2e;
+      margin-bottom: 12px;
+    }
+
+    /* ── Warning table ── */
+    .warn-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.83rem;
+    }
+
+    .warn-table th {
+      text-align: left;
+      padding: 7px 10px;
+      background: #f8f9fb;
+      color: #555;
+      border-bottom: 2px solid #e8ecf4;
+    }
+
+    .warn-table td {
+      padding: 6px 10px;
+      border-bottom: 1px solid #f0f2f5;
+    }
+
+    .warn-table tr:last-child td { border-bottom: none; }
+    .warn-table tr:hover td { background: #fafbff; }
+
+    /* ── Download button ── */
+    .btn-download {
+      background: #34c77b;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 11px 28px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+      display: none;
+    }
+
+    .btn-download:hover { background: #28b36c; }
+
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a class="navbar-brand" href="index.html">🌲 BioFakturaHelper</a>
+  <div class="navbar-divider"></div>
+  <ul class="navbar-links">
+    <li><a href="index.html">Fakturagranskning</a></li>
+    <li><a href="matplats-berikare.html">Mätplats-berikare</a></li>
+    <li><a href="affarsledberikare.html">Affärsled-berikare</a></li>
+  </ul>
+</nav>
+
+<script>
+  (function () {
+    const page = location.pathname.split('/').pop() || 'index.html';
+    document.querySelectorAll('.navbar-links a').forEach(function (a) {
+      if (a.getAttribute('href') === page) a.classList.add('active');
+    });
+  })();
+</script>
+
+<div class="page-header">
+  <h1>🔗 Affärsled-berikare</h1>
+  <p>Ladda upp en Redovisade mätningar-fil och en leverans-CSV för att berika med köpare, säljare och affärsled per sekvens</p>
+</div>
+
+<!-- Upload cards -->
+<div class="upload-grid">
+  <div class="upload-card" id="drop-excel"
+       ondragover="handleDrag(event,'drop-excel')"
+       ondragleave="handleDragLeave('drop-excel')"
+       ondrop="handleDrop(event,'excel')">
+    <div class="upload-icon">📊</div>
+    <h3>Redovisade mätningar (.xlsx)</h3>
+    <p>Innehåller affärsled-information per leverans</p>
+    <button class="btn-upload" onclick="document.getElementById('input-excel').click()">Välj fil</button>
+    <input type="file" id="input-excel" accept=".xlsx,.xls" onchange="loadExcel(this.files[0])">
+    <div class="file-name" id="name-excel"></div>
+  </div>
+
+  <div class="upload-card" id="drop-csv"
+       ondragover="handleDrag(event,'drop-csv')"
+       ondragleave="handleDragLeave('drop-csv')"
+       ondrop="handleDrop(event,'csv')">
+    <div class="upload-icon">📄</div>
+    <h3>Leverans-CSV (.csv)</h3>
+    <p>MPS registrering av leverans (semikolonseparerad)</p>
+    <button class="btn-upload" onclick="document.getElementById('input-csv').click()">Välj fil</button>
+    <input type="file" id="input-csv" accept=".csv" onchange="loadCsv(this.files[0])">
+    <div class="file-name" id="name-csv"></div>
+  </div>
+</div>
+
+<!-- Action bar -->
+<div class="action-bar">
+  <button class="btn-primary" id="btn-process" disabled onclick="process()">Berika CSV</button>
+  <button class="btn-download" id="btn-download" onclick="download()">⬇ Ladda ned berikad CSV</button>
+</div>
+
+<!-- Stats -->
+<div class="stats-grid hidden" id="stats-section">
+  <div class="stat-card">
+    <div class="stat-num" id="stat-total">0</div>
+    <div class="stat-label">Rader i CSV</div>
+  </div>
+  <div class="stat-card green">
+    <div class="stat-num" id="stat-matched">0</div>
+    <div class="stat-label">Matchade leveranser</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num" id="stat-seqs">0</div>
+    <div class="stat-label">Max affärsled</div>
+  </div>
+  <div class="stat-card orange">
+    <div class="stat-num" id="stat-unmatched">0</div>
+    <div class="stat-label">Omatchade leveranser</div>
+  </div>
+</div>
+
+<!-- Warning table -->
+<div class="result-card hidden" id="warn-section">
+  <h2>⚠️ Leveranser utan matchning i Excel-filen</h2>
+  <table class="warn-table">
+    <thead><tr><th>#</th><th>Leverans-ID</th></tr></thead>
+    <tbody id="warn-body"></tbody>
+  </table>
+</div>
+
+<script>
+  // ── State ──
+  let chainMap = null;   // Map<deliveryId, Map<seq, {buyer,seller,last}>>
+  let maxSeq = 0;
+  let csvText = null;
+  let outputCsv = null;
+
+  // ── Drag & drop helpers ──
+  function handleDrag(e, id) {
+    e.preventDefault();
+    document.getElementById(id).classList.add('drag-over');
+  }
+  function handleDragLeave(id) {
+    document.getElementById(id).classList.remove('drag-over');
+  }
+  function handleDrop(e, type) {
+    e.preventDefault();
+    const id = type === 'excel' ? 'drop-excel' : 'drop-csv';
+    document.getElementById(id).classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    if (type === 'excel') loadExcel(file);
+    else loadCsv(file);
+  }
+
+  // ── File loaders ──
+  function loadExcel(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws);
+
+      chainMap = new Map();
+      maxSeq = 0;
+
+      rows.forEach(function (r) {
+        const deliveryId = String(r['DeliveryId'] || '').trim();
+        const seq = Number(r['Sequence']);
+        const buyer = String(r['BuyerPapiNetGlobalPartyIdentifier'] || '').trim();
+        const seller = String(r['SellerPapiNetGlobalPartyIdentifier'] || '').trim();
+        const last = String(r['LastSequenceForContractChain'] || '').trim();
+
+        if (!deliveryId || isNaN(seq)) return;
+
+        if (!chainMap.has(deliveryId)) chainMap.set(deliveryId, new Map());
+        // Deduplicate: only store first occurrence of each seq
+        if (!chainMap.get(deliveryId).has(seq)) {
+          chainMap.get(deliveryId).set(seq, { buyer, seller, last });
+        }
+        if (seq > maxSeq) maxSeq = seq;
+      });
+
+      document.getElementById('name-excel').textContent = '✓ ' + file.name;
+      document.getElementById('drop-excel').classList.add('file-loaded');
+      checkReady();
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function loadCsv(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      csvText = e.target.result;
+      document.getElementById('name-csv').textContent = '✓ ' + file.name;
+      document.getElementById('drop-csv').classList.add('file-loaded');
+      checkReady();
+    };
+    reader.readAsText(file, 'UTF-8');
+  }
+
+  function checkReady() {
+    document.getElementById('btn-process').disabled = !(chainMap && csvText);
+  }
+
+  // ── Processing ──
+  function process() {
+    outputCsv = null;
+    document.getElementById('btn-download').style.display = 'none';
+    document.getElementById('stats-section').classList.add('hidden');
+    document.getElementById('warn-section').classList.add('hidden');
+
+    // Parse CSV (handle BOM and CRLF)
+    const text = csvText.replace(/^\uFEFF/, '');
+    const lines = text.split(/\r?\n/);
+    const sep = ';';
+    const headers = lines[0].split(sep).map(function (h) { return h.trim(); });
+
+    const leveransIdx = headers.findIndex(function (h) {
+      return h.toLowerCase() === 'leverans';
+    });
+
+    if (leveransIdx === -1) {
+      alert('Kunde inte hitta kolumnen "Leverans" i CSV-filen.');
+      return;
+    }
+
+    // Build new header columns for each sequence
+    const seqHeaders = [];
+    for (let n = 1; n <= maxSeq; n++) {
+      seqHeaders.push('Köpare_' + n, 'Säljare_' + n, 'Affärsled_' + n, 'Sista_affärsled_' + n);
+    }
+
+    const newHeaders = headers.concat(seqHeaders);
+    const outputLines = [newHeaders.join(sep)];
+
+    let totalRows = 0;
+    let matchedSet = new Set();
+    const unmatchedSet = new Set();
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line.trim()) continue;
+      totalRows++;
+
+      const cells = line.split(sep);
+      const leverans = (cells[leveransIdx] || '').trim();
+      const seqData = chainMap.get(leverans);
+
+      const newCells = cells.slice();
+
+      for (let n = 1; n <= maxSeq; n++) {
+        const entry = seqData ? seqData.get(n) : null;
+        newCells.push(
+          entry ? entry.buyer  : '',
+          entry ? entry.seller : '',
+          entry ? String(n)    : '',
+          entry ? entry.last   : ''
+        );
+      }
+
+      if (seqData) matchedSet.add(leverans);
+      else if (leverans) unmatchedSet.add(leverans);
+
+      outputLines.push(newCells.join(sep));
+    }
+
+    outputCsv = '\uFEFF' + outputLines.join('\r\n');
+
+    // Update stats
+    document.getElementById('stat-total').textContent = totalRows;
+    document.getElementById('stat-matched').textContent = matchedSet.size;
+    document.getElementById('stat-seqs').textContent = maxSeq;
+    document.getElementById('stat-unmatched').textContent = unmatchedSet.size;
+    document.getElementById('stats-section').classList.remove('hidden');
+
+    // Warning table
+    if (unmatchedSet.size > 0) {
+      const tbody = document.getElementById('warn-body');
+      tbody.innerHTML = '';
+      let idx = 1;
+      unmatchedSet.forEach(function (id) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td>' + idx++ + '</td><td>' + id + '</td>';
+        tbody.appendChild(tr);
+      });
+      document.getElementById('warn-section').classList.remove('hidden');
+    }
+
+    document.getElementById('btn-download').style.display = 'inline-block';
+  }
+
+  // ── Download ──
+  function download() {
+    if (!outputCsv) return;
+    const blob = new Blob([outputCsv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'leverans_med_affarsledinformation.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+</script>
+
+</body>
+</html>
