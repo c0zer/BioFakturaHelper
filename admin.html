@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registerhantering – BioFakturaHelper</title>
+  <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f0f2f5;
+      color: #333;
+      padding-top: 72px;
+      padding-left: 16px;
+      padding-right: 16px;
+      padding-bottom: 32px;
+      min-height: 100vh;
+    }
+
+    /* ── Navbar ── */
+    .navbar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 56px;
+      background: #1a1a2e;
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      z-index: 1000;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    .navbar-brand {
+      color: #fff;
+      font-weight: 700;
+      font-size: 1.1rem;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .navbar-divider {
+      width: 1px;
+      height: 24px;
+      background: rgba(255,255,255,0.2);
+      margin: 0 20px;
+    }
+    .navbar-links {
+      display: flex;
+      gap: 4px;
+      list-style: none;
+      flex-wrap: wrap;
+    }
+    .navbar-links a {
+      color: rgba(255,255,255,0.75);
+      text-decoration: none;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      transition: background 0.15s, color 0.15s;
+    }
+    .navbar-links a:hover { background: rgba(255,255,255,0.1); color: #fff; }
+    .navbar-links a.active { background: rgba(255,255,255,0.15); color: #fff; font-weight: 600; }
+
+    /* ── Layout ── */
+    .page-header {
+      max-width: 900px;
+      margin: 32px auto 28px;
+    }
+    .page-header h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 8px; }
+    .page-header p  { color: #666; font-size: 0.95rem; line-height: 1.5; }
+
+    .register-grid {
+      max-width: 900px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    @media (max-width: 640px) { .register-grid { grid-template-columns: 1fr; } }
+
+    /* ── Card ── */
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 28px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-desc { color: #666; font-size: 0.875rem; line-height: 1.5; }
+
+    /* ── Status badge ── */
+    .status-box {
+      background: #f8f9fa;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 14px 16px;
+      font-size: 0.85rem;
+      line-height: 1.7;
+    }
+    .status-label { font-weight: 600; color: #555; }
+    .status-value { color: #333; }
+    .badge-local  { display: inline-block; background: #d4edda; color: #155724; border-radius: 4px; padding: 1px 8px; font-size: 0.78rem; font-weight: 600; }
+    .badge-embed  { display: inline-block; background: #fff3cd; color: #856404; border-radius: 4px; padding: 1px 8px; font-size: 0.78rem; font-weight: 600; }
+
+    /* ── Drop zone ── */
+    .drop-zone {
+      border: 2px dashed #c0c0c0;
+      border-radius: 8px;
+      padding: 28px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      background: #fafafa;
+      color: #777;
+      font-size: 0.875rem;
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: #2c7be5;
+      background: #eef4ff;
+      color: #2c7be5;
+    }
+    .drop-zone .icon { font-size: 2rem; display: block; margin-bottom: 8px; }
+    .drop-zone input[type=file] { display: none; }
+
+    /* ── Buttons ── */
+    .btn-danger {
+      background: none;
+      border: 1px solid #dc3545;
+      color: #dc3545;
+      padding: 6px 16px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      align-self: flex-start;
+    }
+    .btn-danger:hover { background: #dc3545; color: #fff; }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: #1a1a2e;
+      color: #fff;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      opacity: 0;
+      transition: opacity 0.3s, transform 0.3s;
+      pointer-events: none;
+      z-index: 9999;
+      white-space: nowrap;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a class="navbar-brand" href="index.html">🌲 BioFakturaHelper</a>
+  <div class="navbar-divider"></div>
+  <ul class="navbar-links">
+    <li><a href="index.html">Fakturagranskning</a></li>
+    <li><a href="matplats-berikare.html">Mätplats-berikare</a></li>
+    <li><a href="affarsledberikare.html">Affärsled-berikare</a></li>
+    <li><a href="admin.html">Register</a></li>
+  </ul>
+</nav>
+
+<script>
+  (function () {
+    var page = location.pathname.split('/').pop() || 'index.html';
+    document.querySelectorAll('.navbar-links a').forEach(function (a) {
+      if (a.getAttribute('href') === page) a.classList.add('active');
+    });
+  })();
+</script>
+
+<div class="page-header">
+  <h1>⚙️ Registerhantering</h1>
+  <p>Ladda upp nya versioner av masterdata-registren. Datan sparas i webbläsarens lokala lagring och används omedelbart av alla verktyg — ingen omstart krävs.</p>
+</div>
+
+<div class="register-grid">
+
+  <!-- ── Aktörer ── -->
+  <div class="card">
+    <div class="card-title">👥 Aktörer-register</div>
+    <p class="card-desc">
+      Används av <strong>Affärsled-berikare</strong> för att slå upp Köpare och Säljare namn.<br>
+      Förväntar kolumnerna <code>Aktörsnummer</code> och <code>Namn</code>.
+    </p>
+
+    <div class="status-box" id="aktorer-status">Läser status…</div>
+
+    <div class="drop-zone" id="aktorer-drop"
+         onclick="document.getElementById('aktorer-file').click()"
+         ondragover="dragOver(event,'aktorer-drop')"
+         ondragleave="dragLeave('aktorer-drop')"
+         ondrop="dropFile(event,'aktorer-drop','aktorer')">
+      <span class="icon">📂</span>
+      Klicka eller dra en PROD_Aktörer_*.xlsx hit
+      <input type="file" id="aktorer-file" accept=".xlsx,.xls"
+             onchange="handleFile(this,'aktorer')">
+    </div>
+
+    <button class="btn-danger" id="aktorer-clear" onclick="clearRegister('aktorer')" style="display:none">
+      🗑 Rensa sparad data
+    </button>
+  </div>
+
+  <!-- ── Mätplatser ── -->
+  <div class="card">
+    <div class="card-title">📍 Mätplatser-register</div>
+    <p class="card-desc">
+      Används av <strong>Mätplats-berikare</strong> för att slå upp Mätplatsnamn.<br>
+      Förväntar kolumnerna <code>Mätplats</code> och <code>Mätplats, namn</code>.
+    </p>
+
+    <div class="status-box" id="matplatser-status">Läser status…</div>
+
+    <div class="drop-zone" id="matplatser-drop"
+         onclick="document.getElementById('matplatser-file').click()"
+         ondragover="dragOver(event,'matplatser-drop')"
+         ondragleave="dragLeave('matplatser-drop')"
+         ondrop="dropFile(event,'matplatser-drop','matplatser')">
+      <span class="icon">📂</span>
+      Klicka eller dra en PROD_Mätplatser_*.xlsx hit
+      <input type="file" id="matplatser-file" accept=".xlsx,.xls"
+             onchange="handleFile(this,'matplatser')">
+    </div>
+
+    <button class="btn-danger" id="matplatser-clear" onclick="clearRegister('matplatser')" style="display:none">
+      🗑 Rensa sparad data
+    </button>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+  // ── Column config per register type ──
+  var CONFIGS = {
+    aktorer: {
+      lsKey:  'biofaktura_aktorer',
+      metaKey: 'biofaktura_aktorer_meta',
+      idCol:  'aktörsnummer',
+      nmCol:  'namn',
+      label:  'aktörer'
+    },
+    matplatser: {
+      lsKey:  'biofaktura_matplatser',
+      metaKey: 'biofaktura_matplatser_meta',
+      idCol:  'mätplats',
+      nmCol:  'mätplats, namn',
+      label:  'mätplatser'
+    }
+  };
+
+  // ── Render status ──
+  function renderStatus(type) {
+    var cfg    = CONFIGS[type];
+    var meta   = null;
+    var hasLS  = false;
+    try {
+      var m = localStorage.getItem(cfg.metaKey);
+      if (m) { meta = JSON.parse(m); hasLS = true; }
+    } catch (e) {}
+
+    var box   = document.getElementById(type + '-status');
+    var clear = document.getElementById(type + '-clear');
+
+    if (hasLS && meta) {
+      box.innerHTML =
+        '<span class="badge-local">Lokal data</span> &nbsp;' +
+        '<span class="status-label">Poster:</span> <span class="status-value">' + meta.entries.toLocaleString('sv') + '</span> &nbsp;' +
+        '<span class="status-label">Fil:</span> <span class="status-value">' + escHtml(meta.filename) + '</span><br>' +
+        '<span class="status-label">Uppladdad:</span> <span class="status-value">' + meta.uploadedAt + '</span>';
+      clear.style.display = 'inline-block';
+    } else {
+      box.innerHTML =
+        '<span class="badge-embed">Inbyggd data</span> &nbsp;' +
+        'Ingen uppladdad data – verktyget använder registerdata som är inbyggd i sidan.';
+      clear.style.display = 'none';
+    }
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ── File handling ──
+  function handleFile(input, type) {
+    if (!input.files || !input.files[0]) return;
+    processFile(input.files[0], type);
+    input.value = '';
+  }
+
+  function processFile(file, type) {
+    var cfg = CONFIGS[type];
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      try {
+        var wb   = XLSX.read(e.target.result, { type: 'array' });
+        var ws   = wb.Sheets[wb.SheetNames[0]];
+        var data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+        var hdrs = data[0].map(function (h) { return String(h).trim().toLowerCase(); });
+        var idI  = hdrs.indexOf(cfg.idCol);
+        var nmI  = hdrs.indexOf(cfg.nmCol);
+
+        if (idI === -1 || nmI === -1) {
+          showToast('❌ Hittade inte kolumnerna "' + cfg.idCol + '" och "' + cfg.nmCol + '" i filen.', true);
+          return;
+        }
+
+        var entries = [];
+        for (var i = 1; i < data.length; i++) {
+          var id = String(data[i][idI] || '').trim();
+          var nm = String(data[i][nmI] || '').trim();
+          if (id) entries.push([id, nm]);
+        }
+
+        localStorage.setItem(cfg.lsKey, JSON.stringify(entries));
+        var meta = {
+          filename:   file.name,
+          entries:    entries.length,
+          uploadedAt: new Date().toLocaleString('sv-SE')
+        };
+        localStorage.setItem(cfg.metaKey, JSON.stringify(meta));
+
+        renderStatus(type);
+        showToast('✅ ' + entries.length.toLocaleString('sv') + ' ' + cfg.label + ' sparade!');
+      } catch (err) {
+        showToast('❌ Fel vid inläsning: ' + err.message, true);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function clearRegister(type) {
+    var cfg = CONFIGS[type];
+    localStorage.removeItem(cfg.lsKey);
+    localStorage.removeItem(cfg.metaKey);
+    renderStatus(type);
+    showToast('🗑 ' + cfg.label.charAt(0).toUpperCase() + cfg.label.slice(1) + '-data rensad.');
+  }
+
+  // ── Drag & drop ──
+  function dragOver(e, id) {
+    e.preventDefault();
+    document.getElementById(id).classList.add('drag-over');
+  }
+  function dragLeave(id) {
+    document.getElementById(id).classList.remove('drag-over');
+  }
+  function dropFile(e, dropId, type) {
+    e.preventDefault();
+    document.getElementById(dropId).classList.remove('drag-over');
+    var files = e.dataTransfer.files;
+    if (files && files[0]) processFile(files[0], type);
+  }
+
+  // ── Toast ──
+  var _toastTimer = null;
+  function showToast(msg, isError) {
+    var el = document.getElementById('toast');
+    el.textContent = msg;
+    el.style.background = isError ? '#c0392b' : '#1a1a2e';
+    el.classList.add('show');
+    if (_toastTimer) clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(function () { el.classList.remove('show'); }, 3500);
+  }
+
+  // ── Init ──
+  renderStatus('aktorer');
+  renderStatus('matplatser');
+</script>
+
+</body>
+</html>
