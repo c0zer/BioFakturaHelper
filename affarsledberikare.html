@@ -354,7 +354,7 @@
   </div>
   <div class="stat-card">
     <div class="stat-num" id="stat-seqs">0</div>
-    <div class="stat-label">Max affärsled</div>
+  <div class="stat-label">Utökade rader (totalt)</div>
   </div>
   <div class="stat-card orange">
     <div class="stat-num" id="stat-unmatched">0</div>
@@ -470,16 +470,12 @@
       return;
     }
 
-    // Build new header columns for each sequence
-    const seqHeaders = [];
-    for (let n = 1; n <= maxSeq; n++) {
-      seqHeaders.push('Köpare_' + n, 'Säljare_' + n, 'Affärsled_' + n, 'Sista_affärsled_' + n);
-    }
-
-    const newHeaders = headers.concat(seqHeaders);
+    // Build new header (4 flat columns, no suffix)
+    const newHeaders = headers.concat(['Köpare', 'Säljare', 'Affärsled', 'Sista_affärsled']);
     const outputLines = [newHeaders.join(sep)];
 
     let totalRows = 0;
+    let outputRowCount = 0;
     let matchedSet = new Set();
     const unmatchedSet = new Set();
 
@@ -492,22 +488,22 @@
       const leverans = (cells[leveransIdx] || '').trim();
       const seqData = chainMap.get(leverans);
 
-      const newCells = cells.slice();
-
-      for (let n = 1; n <= maxSeq; n++) {
-        const entry = seqData ? seqData.get(n) : null;
-        newCells.push(
-          entry ? entry.buyer  : '',
-          entry ? entry.seller : '',
-          entry ? String(n)    : '',
-          entry ? entry.last   : ''
-        );
+      if (seqData && seqData.size > 0) {
+        // One output row per sequence, sorted ascending
+        const sortedSeqs = Array.from(seqData.keys()).sort(function (a, b) { return a - b; });
+        sortedSeqs.forEach(function (n) {
+          const entry = seqData.get(n);
+          const newCells = cells.concat([entry.buyer, entry.seller, String(n), entry.last]);
+          outputLines.push(newCells.join(sep));
+          outputRowCount++;
+        });
+        matchedSet.add(leverans);
+      } else {
+        // No match — output original row with empty new columns
+        outputLines.push(cells.concat(['', '', '', '']).join(sep));
+        outputRowCount++;
+        if (leverans) unmatchedSet.add(leverans);
       }
-
-      if (seqData) matchedSet.add(leverans);
-      else if (leverans) unmatchedSet.add(leverans);
-
-      outputLines.push(newCells.join(sep));
     }
 
     outputCsv = '\uFEFF' + outputLines.join('\r\n');
@@ -515,7 +511,7 @@
     // Update stats
     document.getElementById('stat-total').textContent = totalRows;
     document.getElementById('stat-matched').textContent = matchedSet.size;
-    document.getElementById('stat-seqs').textContent = maxSeq;
+    document.getElementById('stat-seqs').textContent = outputRowCount;
     document.getElementById('stat-unmatched').textContent = unmatchedSet.size;
     document.getElementById('stats-section').classList.remove('hidden');
 
