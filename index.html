@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ellips – Fakturagranskning</title>
+  <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f0f2f5;
+      color: #333;
+      padding: 32px 16px;
+      min-height: 100vh;
+    }
+
+    .page-header {
+      max-width: 860px;
+      margin: 0 auto 28px;
+    }
+
+    .page-header h1 {
+      font-size: 1.6rem;
+      color: #1a1a2e;
+      margin-bottom: 4px;
+    }
+
+    .page-header p {
+      color: #666;
+      font-size: 0.9rem;
+    }
+
+    /* ── Upload area ── */
+    .upload-card {
+      max-width: 860px;
+      margin: 0 auto 28px;
+      background: #fff;
+      border: 2px dashed #c5cde0;
+      border-radius: 14px;
+      padding: 44px 32px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .upload-card.drag-over {
+      border-color: #4a7fd4;
+      background: #eef3fc;
+    }
+
+    .upload-icon { font-size: 2.8rem; margin-bottom: 12px; }
+
+    .upload-card p {
+      color: #666;
+      margin-bottom: 18px;
+      font-size: 0.95rem;
+    }
+
+    .btn-primary {
+      background: #4a7fd4;
+      color: #fff;
+      border: none;
+      padding: 10px 26px;
+      border-radius: 7px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-weight: 500;
+      transition: background 0.15s;
+    }
+
+    .btn-primary:hover { background: #3568b8; }
+
+    #file-input { display: none; }
+
+    .file-name {
+      margin-top: 14px;
+      font-size: 0.83rem;
+      color: #888;
+      min-height: 1.2em;
+    }
+
+    /* ── Results ── */
+    #results-wrapper {
+      display: none;
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    .toolbar {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 18px;
+    }
+
+    .btn-download {
+      background: #2e9e5e;
+      color: #fff;
+      border: none;
+      padding: 10px 22px;
+      border-radius: 7px;
+      cursor: pointer;
+      font-size: 0.92rem;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      transition: background 0.15s;
+    }
+
+    .btn-download:hover { background: #257a4a; }
+
+    .card {
+      background: #fff;
+      border-radius: 14px;
+      padding: 22px 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 5px rgba(0,0,0,0.07);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+
+    .card-header h2 { font-size: 1rem; font-weight: 600; }
+
+    .badge {
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 2px 9px;
+      border-radius: 20px;
+    }
+
+    .badge-blue  { background: #e8f0fe; color: #1967d2; }
+
+    .card-desc {
+      font-size: 0.8rem;
+      color: #888;
+      margin-bottom: 16px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+
+    th {
+      text-align: left;
+      padding: 8px 12px;
+      background: #f7f8fa;
+      font-weight: 600;
+      color: #555;
+      border-bottom: 2px solid #e8eaf0;
+    }
+
+    td {
+      padding: 8px 12px;
+      border-bottom: 1px solid #f0f1f5;
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafbff; }
+
+    .empty-msg {
+      color: #bbb;
+      font-style: italic;
+      font-size: 0.88rem;
+      padding: 4px 0;
+    }
+  </style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>📋 Ellips – Fakturagranskning</h1>
+  <p>Ladda upp en fakturaexportfil (.xlsx) för automatisk ellips-granskning</p>
+  <p style="margin-top:8px;font-size:0.85rem;">
+    Annat verktyg: <a href="matplats-berikare.html" style="color:#4a7fd4;">📍 Mätplats-berikare</a>
+    – fyll i tomma Mätplats-värden från en Kvalitetsorder-fil
+  </p>
+</div>
+
+<div class="upload-card" id="drop-zone">
+  <div class="upload-icon">📂</div>
+  <p>Dra och släpp en .xlsx- eller .csv-fil här, eller klicka för att välja fil</p>
+  <button class="btn-primary" onclick="document.getElementById('file-input').click()">Välj fil</button>
+  <input type="file" id="file-input" accept=".xlsx,.xls,.csv">
+  <div class="file-name" id="file-name-display"></div>
+</div>
+
+<div id="results-wrapper">
+
+  <div class="toolbar">
+    <button class="btn-download" id="btn-download">
+      ⬇ Ladda ned resultat (.xlsx)
+    </button>
+  </div>
+
+  <!-- Segment 1: nyckelord -->
+  <div class="card">
+    <div class="card-header">
+      <h2>🔍 Nyckelord: faktura / bestrida</h2>
+      <span class="badge badge-blue" id="badge-keyword">0</span>
+    </div>
+    <p class="card-desc">Ärenderubrik innehåller "bestrida" eller "fakturering" (inkl. böjningar/felstavningar)</p>
+    <div id="tbl-keyword"></div>
+  </div>
+
+  <!-- Segment 2: tid > 100 min -->
+  <div class="card">
+    <div class="card-header">
+      <h2>⏱ Tid över 100 minuter</h2>
+      <span class="badge badge-blue" id="badge-tid-over">0</span>
+    </div>
+    <p class="card-desc">Tid &gt; 100 min</p>
+    <div id="tbl-tid-over"></div>
+  </div>
+
+  <!-- Segment 3: tid < 12 min -->
+  <div class="card">
+    <div class="card-header">
+      <h2>⏱ Tid under 12 minuter</h2>
+      <span class="badge badge-blue" id="badge-tid-under">0</span>
+    </div>
+    <p class="card-desc">Tid &lt; 12 min</p>
+    <div id="tbl-tid-under"></div>
+  </div>
+
+  <!-- Segment 4: debiteringsenhet > 8,3 -->
+  <div class="card">
+    <div class="card-header">
+      <h2>💰 Hög debiteringsenhet</h2>
+      <span class="badge badge-blue" id="badge-debitering">0</span>
+    </div>
+    <p class="card-desc">Debiteringsenhet &gt; 8,3</p>
+    <div id="tbl-debitering"></div>
+  </div>
+
+</div>
+
+<script>
+  /* ── Column indices (0-based) ── */
+  const COL_ARENDENUMMER    = 2;  // C
+  const COL_ARENDERUBRIK    = 3;  // D
+  const COL_TID             = 6;  // G – Antal minuter fakturering
+  const COL_DEBITERINGSENHET = 7; // H – Debiteringsenheter för fakturering
+
+  // Matchar "bestrida" och böjningar (bestrider, bestred, bestridit, bestridna...)
+  // samt vanliga felstavningar (bestryd*, bestred*).
+  // Matchar "fakturering" och böjningar (faktura, faktureras, fakturerat...)
+  // samt "facturering" (engelskt stavningsinflytande).
+  const KEYWORD_REGEX = /bestrid|bestred|bestry|faktur|factur/i;
+
+  let lastResult = null;
+
+  /* ── Helpers ── */
+  function parseNumber(value) {
+    if (value === null || value === undefined || value === '') return null;
+    if (typeof value === 'number') return value;
+    if (typeof value === 'boolean') return null;
+    if (typeof value === 'string') {
+      const n = parseFloat(value.replace(',', '.').trim());
+      return isNaN(n) ? null : n;
+    }
+    return null;
+  }
+
+  /* ── Core analysis ── */
+  function analyzeRows(rows) {
+    const keyword    = [];
+    const tidOver    = [];
+    const tidUnder   = [];
+    const debitering = [];
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const arendenummer    = String(row[COL_ARENDENUMMER]      ?? '').trim();
+      const arenderubrik    = String(row[COL_ARENDERUBRIK]      ?? '').trim();
+      if (!arendenummer && !arenderubrik) continue;
+
+      const tid              = parseNumber(row[COL_TID]);
+      const debiteringsenhet = parseNumber(row[COL_DEBITERINGSENHET]);
+      const entry = { arendenummer, arenderubrik, tid, debiteringsenhet };
+
+      if (KEYWORD_REGEX.test(arenderubrik))                    keyword.push(entry);
+      if (tid !== null && tid > 100)                           tidOver.push(entry);
+      if (tid !== null && tid < 12)                            tidUnder.push(entry);
+      if (debiteringsenhet !== null && debiteringsenhet > 8.3) debitering.push(entry);
+    }
+
+    return { keyword, tidOver, tidUnder, debitering };
+  }
+
+  /* ── Render a result table ── */
+  function renderTable(containerId, data, cols) {
+    const el = document.getElementById(containerId);
+    if (data.length === 0) {
+      el.innerHTML = '<p class="empty-msg">Inga träffar</p>';
+      return;
+    }
+    const head = cols.map(c => `<th>${c.label}</th>`).join('');
+    const body = data.map(row =>
+      '<tr>' + cols.map(c => `<td>${row[c.key] ?? ''}</td>`).join('') + '</tr>'
+    ).join('');
+    el.innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  }
+
+  /* ── Display results on page ── */
+  function showResults(result) {
+    lastResult = result;
+    document.getElementById('results-wrapper').style.display = 'block';
+
+    const COLS = [
+      { key: 'arendenummer',     label: 'Ärendenummer'     },
+      { key: 'arenderubrik',     label: 'Ärenderubrik'     },
+      { key: 'tid',              label: 'Tid (min)'        },
+      { key: 'debiteringsenhet', label: 'Debiteringsenhet' }
+    ];
+
+    document.getElementById('badge-keyword').textContent    = result.keyword.length;
+    document.getElementById('badge-tid-over').textContent   = result.tidOver.length;
+    document.getElementById('badge-tid-under').textContent  = result.tidUnder.length;
+    document.getElementById('badge-debitering').textContent = result.debitering.length;
+
+    renderTable('tbl-keyword',    result.keyword,    COLS);
+    renderTable('tbl-tid-over',   result.tidOver,    COLS);
+    renderTable('tbl-tid-under',  result.tidUnder,   COLS);
+    renderTable('tbl-debitering', result.debitering, COLS);
+
+    document.getElementById('results-wrapper')
+      .scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  /* ── CSV parser: semicolon-delimited, double-quoted, handles embedded commas/quotes ── */
+  function parseCSV(text) {
+    const rows = [];
+    const lines = text.split(/\r?\n/);
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const fields = [];
+      let current = '';
+      let inQuote = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          // Escaped double-quote inside quoted field ("" → ")
+          if (inQuote && line[i + 1] === '"') { current += '"'; i++; }
+          else { inQuote = !inQuote; }
+        } else if (ch === ';' && !inQuote) {
+          fields.push(current);
+          current = '';
+        } else {
+          current += ch;
+        }
+      }
+      fields.push(current);
+      rows.push(fields);
+    }
+    return rows;
+  }
+
+  /* ── Process an uploaded File object ── */
+  function processFile(file) {
+    document.getElementById('file-name-display').textContent = '📄 ' + file.name;
+    const isCsv = file.name.toLowerCase().endsWith('.csv');
+    const reader = new FileReader();
+
+    if (isCsv) {
+      reader.onload = function (e) {
+        const rows = parseCSV(e.target.result);
+        showResults(analyzeRows(rows));
+      };
+      // Try UTF-8 first; matches files exported from modern tools
+      reader.readAsText(file, 'utf-8');
+    } else {
+      reader.onload = function (e) {
+        const wb   = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+        const ws   = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+        showResults(analyzeRows(rows));
+      };
+      reader.readAsArrayBuffer(file);
+    }
+  }
+
+  /* ── File input ── */
+  document.getElementById('file-input').addEventListener('change', function (e) {
+    if (e.target.files[0]) processFile(e.target.files[0]);
+  });
+
+  /* ── Drag-and-drop ── */
+  const dropZone = document.getElementById('drop-zone');
+  dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', ()  => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) processFile(file);
+  });
+
+  /* ── Download results as .xlsx ── */
+  document.getElementById('btn-download').addEventListener('click', function () {
+    if (!lastResult) return;
+
+    const COLS = [
+      { key: 'arendenummer',     label: 'Ärendenummer'     },
+      { key: 'arenderubrik',     label: 'Ärenderubrik'     },
+      { key: 'tid',              label: 'Tid (min)'        },
+      { key: 'debiteringsenhet', label: 'Debiteringsenhet' }
+    ];
+
+    function makeSheet(data) {
+      const header = [COLS.map(c => c.label)];
+      const rows   = data.map(row => COLS.map(c => row[c.key] ?? ''));
+      return XLSX.utils.aoa_to_sheet([...header, ...rows]);
+    }
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, makeSheet(lastResult.keyword),    'Nyckelord');
+    XLSX.utils.book_append_sheet(wb, makeSheet(lastResult.tidOver),    'Tid över 100');
+    XLSX.utils.book_append_sheet(wb, makeSheet(lastResult.tidUnder),   'Tid under 12');
+    XLSX.utils.book_append_sheet(wb, makeSheet(lastResult.debitering), 'Hög debitering');
+
+    XLSX.writeFile(wb, 'ellips-granskning.xlsx');
+  });
+</script>
+
+</body>
+</html>

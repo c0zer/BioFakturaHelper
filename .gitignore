@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Local data files – not for public repo
+Excel-samples/
+MasterdataRegister/
+*.csv
+*.xlsx
+*.xls
+
+# OMC tooling
+.omcp/
+
+# TypeScript scripts (local tooling only)
+scripts/*.ts
